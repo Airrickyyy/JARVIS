@@ -8,6 +8,7 @@ import {
   runGroqRelayTurn,
   speakWithElevenLabsSentences,
 } from "./aiService.js";
+import { ensureSecretsPrompt } from "./secretsStore.js";
 
 /** UI / engine states */
 const States = /** @type {const} */ ({
@@ -22,6 +23,7 @@ const States = /** @type {const} */ ({
 const BUTTON_IDS = /** @type {ButtonId[]} */ (["A", "B", "C", "D"]);
 
 const startBtn = document.getElementById("startJarvisBtn");
+const configBtn = document.getElementById("configBtn");
 const stateLabelEl = document.getElementById("stateLabel");
 const pulseDotEl = document.getElementById("pulseDot");
 const subtitleEl = document.getElementById("subtitle");
@@ -422,11 +424,12 @@ async function bootstrapFromUserGesture() {
   startBtn.textContent = "Initializing…";
 
   try {
+    await ensureSecretsPrompt({ force: false });
     await initialiseAudioStack();
     recognition.restartFresh();
 
     speechNoteEl.textContent =
-      "Populate js/credentials.js or window.JARVIS_CONFIG once before serious use.";
+      "Credentials loaded locally. Say “wake up jarvis” to begin.";
     setState(States.LISTENING);
     startBtn.textContent = "Suspend Jarvis mic";
     startBtn.onclick = async () => {
@@ -468,3 +471,10 @@ if (!RecognitionCtorAvailable()) {
 setState(States.STANDBY);
 
 startBtn.addEventListener("click", bootstrapFromUserGesture);
+
+configBtn?.addEventListener("click", async () => {
+  if (appState === States.SPEAKING) return;
+  await ensureSecretsPrompt({ force: true });
+  speechNoteEl.textContent = "Keys & voice updated locally.";
+  subtitleEl.textContent = "Say “wake up jarvis” again if you were mid-session, Sir.";
+});

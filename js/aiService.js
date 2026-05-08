@@ -1,6 +1,7 @@
 import credDefaults from "./credentials.js";
 import { createGroqMessageList } from "./commandParser.js";
 import { speak } from "./voice.js";
+import { loadSecretsFromLocalStorage } from "./secretsStore.js";
 
 /**
  * @typedef {{
@@ -21,17 +22,36 @@ export function resolveCredentials() {
       ? /** @type {Record<string,string>} */ (window.JARVIS_CONFIG)
       : {};
 
+  const local = loadSecretsFromLocalStorage();
+
   /** @type {ResolvedSecrets} */
   const merged = {
-    groqApiKey: w.groqApiKey ?? credDefaults.groqApiKey ?? "",
-    groqModel: w.groqModel ?? credDefaults.groqModel ?? "llama-3.3-70b-versatile",
-    elevenLabsApiKey: w.elevenLabsApiKey ?? credDefaults.elevenLabsApiKey ?? "",
-    elevenLabsVoiceId: w.elevenLabsVoiceId ?? credDefaults.elevenLabsVoiceId ?? "",
+    groqApiKey:
+      w.groqApiKey ?? local.groqApiKey ?? credDefaults.groqApiKey ?? "",
+    groqModel:
+      w.groqModel ?? local.groqModel ?? credDefaults.groqModel ?? "llama-3.3-70b-versatile",
+    elevenLabsApiKey:
+      w.elevenLabsApiKey ??
+      local.elevenLabsApiKey ??
+      credDefaults.elevenLabsApiKey ??
+      "",
+    elevenLabsVoiceId:
+      w.elevenLabsVoiceId ??
+      local.elevenLabsVoiceId ??
+      credDefaults.elevenLabsVoiceId ??
+      "",
     elevenLabsModelId:
-      w.elevenLabsModelId ?? credDefaults.elevenLabsModelId ?? "eleven_flash_v2_5",
-    groqProxyUrl: w.groqProxyUrl ?? credDefaults.groqProxyUrl ?? "",
+      w.elevenLabsModelId ??
+      local.elevenLabsModelId ??
+      credDefaults.elevenLabsModelId ??
+      "eleven_flash_v2_5",
+    groqProxyUrl:
+      w.groqProxyUrl ?? local.groqProxyUrl ?? credDefaults.groqProxyUrl ?? "",
     elevenLabsProxyUrl:
-      w.elevenLabsProxyUrl ?? credDefaults.elevenLabsProxyUrl ?? "",
+      w.elevenLabsProxyUrl ??
+      local.elevenLabsProxyUrl ??
+      credDefaults.elevenLabsProxyUrl ??
+      "",
   };
   return merged;
 }
