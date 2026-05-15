@@ -32,9 +32,8 @@
             Jarvis interface
           </h1>
           <p id="subtitle" class="mt-2 max-w-xl text-sm text-slate-400">
-            Start the uplink → one browser prompt for
-            <code class="rounded bg-black/35 px-1">Groq_key | ElevenLabs_key | Voice_ID</code>
-            (ElevenLabs optional). Or set keys in
+            Press Start → if needed, a one-time setup card asks for your Groq key (same idea as Daily HQ —
+            stored only in this browser). Optional ElevenLabs fields for voice. Or set
             <code class="rounded bg-black/35 px-1">js/credentials.js</code> /
             <code class="rounded bg-black/35 px-1">window.JARVIS_CONFIG</code>.
           </p>
@@ -145,6 +144,143 @@
           elsewhere.
         </p>
       </footer>
+    </div>
+
+    <!-- First-run setup (Groq key card — pattern from Daily HQ) -->
+    <div
+      id="setupOverlay"
+      class="fixed inset-0 z-[200] hidden items-center justify-center bg-slate-950/92 px-4 backdrop-blur-md"
+      aria-hidden="true"
+    >
+      <div
+        class="w-full max-w-md rounded-2xl border border-slate-700/90 bg-slate-900 p-8 shadow-2xl shadow-black/50"
+        role="dialog"
+        aria-labelledby="setupTitle"
+        aria-modal="true"
+      >
+        <h2 id="setupTitle" class="font-semibold tracking-wide text-white">
+          Jarvis <span class="text-indigo-400 not-italic">// Voice Ops</span>
+        </h2>
+        <p class="mt-2 text-sm leading-relaxed text-slate-400">
+          Enter your Groq API key to activate — stored only in your browser (never sent to our servers).
+        </p>
+        <label class="mt-6 block text-xs font-medium uppercase tracking-wider text-slate-500"
+          >Groq API key</label
+        >
+        <input
+          id="setupGroqKey"
+          type="password"
+          autocomplete="off"
+          placeholder="gsk_..."
+          class="mt-1.5 w-full rounded-lg border border-slate-600 bg-slate-950/80 px-3 py-2.5 font-mono text-sm text-slate-100 outline-none ring-indigo-500/0 transition focus:border-indigo-500/60 focus:ring-2"
+        />
+        <p class="mt-2 text-[11px] leading-relaxed text-slate-500">
+          Get a free key at
+          <a
+            class="text-indigo-400 underline decoration-indigo-500/40 underline-offset-2 hover:text-indigo-300"
+            href="https://console.groq.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            >console.groq.com</a
+          >
+          → API Keys → Create key.
+        </p>
+        <label class="mt-5 block text-xs font-medium uppercase tracking-wider text-slate-500"
+          >Or Groq HTTPS proxy (optional)</label
+        >
+        <input
+          id="setupGroqProxy"
+          type="url"
+          autocomplete="off"
+          placeholder="https://your-origin/groq-proxy"
+          class="mt-1.5 w-full rounded-lg border border-slate-600 bg-slate-950/80 px-3 py-2 font-mono text-xs text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2"
+        />
+        <p class="mt-4 text-xs font-medium text-slate-500">Optional — ElevenLabs</p>
+        <input
+          id="setupElevenKey"
+          type="password"
+          autocomplete="off"
+          placeholder="ElevenLabs API key (xi-api-key)"
+          class="mt-1.5 w-full rounded-lg border border-slate-600 bg-slate-950/80 px-3 py-2 font-mono text-xs text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2"
+        />
+        <input
+          id="setupElevenVoice"
+          type="text"
+          autocomplete="off"
+          placeholder="Voice ID from ElevenLabs"
+          class="mt-2 w-full rounded-lg border border-slate-600 bg-slate-950/80 px-3 py-2 font-mono text-xs text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2"
+        />
+        <button
+          id="setupActivateBtn"
+          type="button"
+          class="mt-6 w-full rounded-lg bg-indigo-600 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-900/40 transition hover:bg-indigo-500"
+        >
+          Activate Jarvis
+        </button>
+        <p id="setupErr" class="mt-3 hidden text-center text-xs font-medium text-rose-400"></p>
+        <p class="mt-4 text-center text-[11px] text-slate-600">
+          Key stays in localStorage on this device — same model as your Daily HQ build.
+        </p>
+      </div>
+    </div>
+
+    <!-- Keys & Voice — edit without re-running first-run -->
+    <div
+      id="keysModalOverlay"
+      class="fixed inset-0 z-[200] hidden items-center justify-center bg-slate-950/80 px-4 backdrop-blur-sm"
+      aria-hidden="true"
+    >
+      <div
+        id="keysModalPanel"
+        class="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-700/90 bg-slate-900 p-7 shadow-2xl"
+        role="dialog"
+        aria-labelledby="keysModalTitle"
+        aria-modal="true"
+      >
+        <h2 id="keysModalTitle" class="font-semibold text-white">Keys &amp; Voice</h2>
+        <p class="mt-1 text-xs text-slate-500">Non-empty fields are saved; leave blank to keep existing values.</p>
+        <label class="mt-5 block text-xs font-medium uppercase tracking-wider text-slate-500">Groq API key</label>
+        <input
+          id="keysGroqKey"
+          type="password"
+          class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950/80 px-3 py-2 font-mono text-sm text-slate-100 outline-none focus:border-indigo-500/60"
+        />
+        <label class="mt-4 block text-xs font-medium uppercase tracking-wider text-slate-500">Groq proxy URL</label>
+        <input
+          id="keysGroqProxy"
+          type="url"
+          class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950/80 px-3 py-2 font-mono text-xs text-slate-100 outline-none focus:border-indigo-500/60"
+        />
+        <label class="mt-4 block text-xs font-medium uppercase tracking-wider text-slate-500">ElevenLabs API key</label>
+        <input
+          id="keysElevenKey"
+          type="password"
+          class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950/80 px-3 py-2 font-mono text-xs text-slate-100 outline-none focus:border-indigo-500/60"
+        />
+        <label class="mt-3 block text-xs font-medium uppercase tracking-wider text-slate-500">ElevenLabs voice ID</label>
+        <input
+          id="keysElevenVoice"
+          type="text"
+          class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950/80 px-3 py-2 font-mono text-xs text-slate-100 outline-none focus:border-indigo-500/60"
+        />
+        <p id="keysModalErr" class="mt-3 hidden text-xs font-medium text-rose-400"></p>
+        <div class="mt-6 flex justify-end gap-2">
+          <button
+            id="keysCancelBtn"
+            type="button"
+            class="rounded-lg border border-slate-600 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800"
+          >
+            Cancel
+          </button>
+          <button
+            id="keysSaveBtn"
+            type="button"
+            class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+          >
+            Save
+          </button>
+        </div>
+      </div>
     </div>
 
     <script type="module" src="./js/app.js"></script>

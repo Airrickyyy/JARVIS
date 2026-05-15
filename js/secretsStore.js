@@ -20,30 +20,8 @@ function setupComplete(surface) {
   return hasGroqConfigured(surface);
 }
 
-/**
- * @param {string} g
- * @param {string} e
- * @param {string} v
- */
-function formatSetupPromptDefault(g, e, v) {
-  return [g, e, v].join("|");
-}
-
-/**
- * @param {string} line
- * @returns {{ groqApiKey: string, elevenLabsApiKey: string, elevenLabsVoiceId: string }}
- */
-function parseSetupPipeLine(line) {
-  const parts = `${line ?? ""}`.split("|").map((s) => s.trim());
-  return {
-    groqApiKey: parts[0] ?? "",
-    elevenLabsApiKey: parts[1] ?? "",
-    elevenLabsVoiceId: parts[2] ?? "",
-  };
-}
-
 /** Same merge order as `resolveCredentials` in `aiService.js` (no circular import). */
-function resolveSecretsSurface() {
+export function getMergedSecretsSurface() {
   const w =
     typeof window !== "undefined" && window.JARVIS_CONFIG
       ? /** @type {Record<string,string>} */ (window.JARVIS_CONFIG)
@@ -84,7 +62,10 @@ function resolveSecretsSurface() {
  */
 export function loadSecretsFromLocalStorage() {
   const raw = {
-    groqApiKey: localStorage.getItem(LS_KEYS.groqApiKey) ?? "",
+    groqApiKey:
+      localStorage.getItem(LS_KEYS.groqApiKey) ??
+      localStorage.getItem("jarvis_groq_key") ??
+      "",
     groqModel: localStorage.getItem(LS_KEYS.groqModel) ?? "",
     elevenLabsApiKey:
       localStorage.getItem(LS_KEYS.elevenLabsApiKey) ?? "",
@@ -129,47 +110,8 @@ export function saveSecretsToLocalStorage(secrets) {
   });
 }
 
-/**
- * One dialog: Groq_key | ElevenLabs_key | Voice_ID (model uses repo default).
- * Groq is satisfied by api key or groqProxyUrl in LS / credentials / JARVIS_CONFIG.
- * ElevenLabs optional — leave key & voice empty to use British browser speech instead.
- *
- * @param {{ force?: boolean }} opts
- */
-export async function ensureSecretsPrompt({ force } = {}) {
-  const existing = loadSecretsFromLocalStorage();
-  const surface = resolveSecretsSurface();
-
-  if (!force && setupComplete(surface)) {
-    return existing;
-  }
-
-  const def = formatSetupPromptDefault(
-    surface.groqApiKey,
-    surface.elevenLabsApiKey,
-    surface.elevenLabsVoiceId
-  );
-
-  const label = force
-    ? "Update keys — Groq_API_key | ElevenLabs_key | Voice_ID (edit, OK saves non-empty segments only):"
-    : "Jarvis setup (one time) — paste: Groq_API_key | ElevenLabs_key | Voice_ID\nLeave ElevenLabs key & voice empty to use British browser voice only. Groq model stays the default from credentials.";
-
-  const input = window.prompt(label, def);
-  if (input === null) {
-    return existing;
-  }
-
-  const parsed = parseSetupPipeLine(input);
-
-  /** @type {Record<string,string>} */
-  const updates = {};
-  if (parsed.groqApiKey) updates.groqApiKey = parsed.groqApiKey;
-  if (parsed.elevenLabsApiKey)
-    updates.elevenLabsApiKey = parsed.elevenLabsApiKey;
-  if (parsed.elevenLabsVoiceId)
-    updates.elevenLabsVoiceId = parsed.elevenLabsVoiceId;
-
-  saveSecretsToLocalStorage(updates);
-  return loadSecretsFromLocalStorage();
+/** @returns {boolean} */
+export function isGroqConfiguredMerged() {
+  return setupComplete(getMergedSecretsSurface());
 }
 

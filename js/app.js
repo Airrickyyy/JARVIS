@@ -8,7 +8,11 @@ import {
   runGroqRelayTurn,
   speakWithElevenLabsSentences,
 } from "./aiService.js";
-import { ensureSecretsPrompt } from "./secretsStore.js";
+import {
+  getMergedSecretsSurface,
+  isGroqConfiguredMerged,
+  saveSecretsToLocalStorage,
+} from "./secretsStore.js";
 
 /** UI / engine states */
 const States = /** @type {const} */ ({
@@ -31,6 +35,310 @@ const hintTextEl = document.getElementById("hintText");
 const speechNoteEl = document.getElementById("speechSupportNote");
 const insecureWarningEl = document.getElementById("insecureWarning");
 const relayGlowEl = document.getElementById("relayGlow");
+
+const setupOverlay = document.getElementById("setupOverlay");
+const setupGroqKey = /** @type {HTMLInputElement | null} */ (
+  document.getElementById("setupGroqKey")
+);
+const setupGroqProxy = /** @type {HTMLInputElement | null} */ (
+  document.getElementById("setupGroqProxy")
+);
+const setupElevenKey = /** @type {HTMLInputElement | null} */ (
+  document.getElementById("setupElevenKey")
+);
+const setupElevenVoice = /** @type {HTMLInputElement | null} */ (
+  document.getElementById("setupElevenVoice")
+);
+const setupActivateBtn = document.getElementById("setupActivateBtn");
+const setupErr = document.getElementById("setupErr");
+
+const keysModalOverlay = document.getElementById("keysModalOverlay");
+const keysGroqKey = /** @type {HTMLInputElement | null} */ (
+  document.getElementById("keysGroqKey")
+);
+const keysGroqProxy = /** @type {HTMLInputElement | null} */ (
+  document.getElementById("keysGroqProxy")
+);
+const keysElevenKey = /** @type {HTMLInputElement | null} */ (
+  document.getElementById("keysElevenKey")
+);
+const keysElevenVoice = /** @type {HTMLInputElement | null} */ (
+  document.getElementById("keysElevenVoice")
+);
+const keysSaveBtn = document.getElementById("keysSaveBtn");
+const keysCancelBtn = document.getElementById("keysCancelBtn");
+const keysModalErr = document.getElementById("keysModalErr");
+
+/** @param {HTMLElement | null} el */
+function showOverlayFlex(el) {
+  if (!el) return;
+  el.classList.remove("hidden");
+  el.classList.add("flex");
+  el.setAttribute("aria-hidden", "false");
+}
+
+/** @param {HTMLElement | null} el */
+function hideOverlayFlex(el) {
+  if (!el) return;
+  el.classList.add("hidden");
+  el.classList.remove("flex");
+  el.setAttribute("aria-hidden", "true");
+}
+
+/** @param {HTMLElement | null} el */
+function hideInlineErr(el) {
+  if (!el) return;
+  el.textContent = "";
+  el.classList.add("hidden");
+}
+
+/** @param {HTMLElement | null} el @param {string} msg */
+function showInlineErr(el, msg) {
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove("hidden");
+}
+
+/**
+ * @param {string} key
+ * @param {string} proxy
+ * @param {boolean} allowImplicitKeep — modal: blank Groq fields keep stored / creds values
+ */
+function validateGroqOrProxy(key, proxy, allowImplicitKeep) {
+  const k = `${key ?? ""}`.trim();
+  const p = `${proxy ?? ""}`.trim();
+  if (k.startsWith("gsk_")) return { ok: true };
+  if (p) {
+    try {
+      const u = new URL(p);
+      if (u.protocol === "http:" || u.protocol === "https:") return { ok: true };
+    } catch {
+      /**/
+    }
+    return {
+      ok: false,
+      msg: "Proxy must be a valid http(s) URL, or enter a Groq API key starting with gsk_.",
+    };
+  }
+  if (allowImplicitKeep) {
+    const s = getMergedSecretsSurface();
+    if (s.groqApiKey?.trim() || s.groqProxyUrl?.trim()) return { ok: true };
+  }
+  return {
+    ok: false,
+    msg: "Please enter a valid Groq API key (starts with gsk_).",
+  };
+}
+
+/** @param {Record<string,string>} surface */
+function fillSetupForm(surface) {
+  if (setupGroqKey) setupGroqKey.value = surface.groqApiKey ?? "";
+  if (setupGroqProxy) setupGroqProxy.value = surface.groqProxyUrl ?? "";
+  if (setupElevenKey) setupElevenKey.value = surface.elevenLabsApiKey ?? "";
+  if (setupElevenVoice) setupElevenVoice.value = surface.elevenLabsVoiceId ?? "";
+}
+
+/** @param {Record<string,string>} surface */
+function fillKeysModal(surface) {
+  if (keysGroqKey) keysGroqKey.value = surface.groqApiKey ?? "";
+  if (keysGroqProxy) keysGroqProxy.value = surface.groqProxyUrl ?? "";
+  if (keysElevenKey) keysElevenKey.value = surface.elevenLabsApiKey ?? "";
+  if (keysElevenVoice) keysElevenVoice.value = surface.elevenLabsVoiceId ?? "";
+}
+
+/**
+ * @param {{
+ *   groqKeyEl: HTMLInputElement | null,
+ *   groqProxyEl: HTMLInputElement | null,
+ *   elevenKeyEl: HTMLInputElement | null,
+ *   elevenVoiceEl: HTMLInputElement | null,
+ *   errEl: HTMLElement | null,
+ *   allowImplicitGroqKeep?: boolean,
+ * }} args
+ */
+function applySecretsFromInputs({
+  groqKeyEl,
+  groqProxyEl,
+  elevenKeyEl,
+  elevenVoiceEl,
+  errEl,
+  allowImplicitGroqKeep = false,
+}) {
+  hideInlineErr(errEl);
+  const k = groqKeyEl?.value?.trim() ?? "";
+  const p = groqProxyEl?.value?.trim() ?? "";
+  const ek = elevenKeyEl?.value?.trim() ?? "";
+  const ev = elevenVoiceEl?.value?.trim() ?? "";
+
+  const groqCheck = validateGroqOrProxy(k, p, allowImplicitGroqKeep);
+  if (!groqCheck.ok) {
+    showInlineErr(errEl, groqCheck.msg);
+    return false;
+  }
+  if (ek && !ev) {
+    showInlineErr(errEl, "Add a Voice ID when using an ElevenLabs API key, Sir.");
+    return false;
+  }
+  if (!ek && ev) {
+    showInlineErr(errEl, "Add the ElevenLabs API key when using a Voice ID.");
+    return false;
+  }
+
+  /** @type {Record<string,string>} */
+  const updates = {};
+  if (k.startsWith("gsk_")) {
+    updates.groqApiKey = k;
+    try {
+      localStorage.removeItem("jarvis_groq_key");
+    } catch {
+      /**/
+    }
+  }
+  if (p) updates.groqProxyUrl = p;
+  if (ek) updates.elevenLabsApiKey = ek;
+  if (ev) updates.elevenLabsVoiceId = ev;
+  saveSecretsToLocalStorage(updates);
+  return true;
+}
+
+/**
+ * First-run setup card or Keys modal (Daily HQ–style Groq capture).
+ * @param {{ force?: boolean }} opts
+ * @returns {Promise<boolean>} true if user saved new values from a modal/setup form
+ */
+function waitForKeysUi({ force } = {}) {
+  if (!force && isGroqConfiguredMerged()) {
+    hideOverlayFlex(setupOverlay);
+    return Promise.resolve(false);
+  }
+
+  return new Promise((resolve) => {
+    const ac = new AbortController();
+    const { signal } = ac;
+    const surface = getMergedSecretsSurface();
+
+    const finish = (saved) => {
+      ac.abort();
+      resolve(saved);
+    };
+
+    const wireInputClear = (inputs, err) => {
+      inputs
+        .filter((inp) => inp instanceof HTMLInputElement)
+        .forEach((inp) => {
+          inp.addEventListener("input", () => hideInlineErr(err), { signal });
+        });
+    };
+
+    if (force) {
+      if (
+        !keysModalOverlay ||
+        !keysGroqKey ||
+        !keysGroqProxy ||
+        !keysElevenKey ||
+        !keysElevenVoice ||
+        !keysSaveBtn ||
+        !keysCancelBtn
+      ) {
+        resolve(false);
+        return;
+      }
+
+      fillKeysModal(surface);
+      hideInlineErr(keysModalErr);
+      showOverlayFlex(keysModalOverlay);
+
+      const save = () => {
+        if (
+          !applySecretsFromInputs({
+            groqKeyEl: keysGroqKey,
+            groqProxyEl: keysGroqProxy,
+            elevenKeyEl: keysElevenKey,
+            elevenVoiceEl: keysElevenVoice,
+            errEl: keysModalErr,
+            allowImplicitGroqKeep: true,
+          })
+        ) {
+          return;
+        }
+        hideOverlayFlex(keysModalOverlay);
+        finish(true);
+      };
+
+      const cancel = () => {
+        hideOverlayFlex(keysModalOverlay);
+        finish(false);
+      };
+
+      keysSaveBtn.addEventListener("click", save, { signal });
+      keysCancelBtn.addEventListener("click", cancel, { signal });
+      keysModalOverlay.addEventListener(
+        "click",
+        (e) => {
+          if (e.target === keysModalOverlay) cancel();
+        },
+        { signal }
+      );
+      keysGroqKey.addEventListener(
+        "keydown",
+        (e) => {
+          if (e.key === "Enter") save();
+        },
+        { signal }
+      );
+      wireInputClear(
+        [keysGroqKey, keysGroqProxy, keysElevenKey, keysElevenVoice],
+        keysModalErr
+      );
+    } else {
+      if (
+        !setupOverlay ||
+        !setupGroqKey ||
+        !setupGroqProxy ||
+        !setupElevenKey ||
+        !setupElevenVoice ||
+        !setupActivateBtn
+      ) {
+        resolve(false);
+        return;
+      }
+
+      fillSetupForm(surface);
+      hideInlineErr(setupErr);
+      showOverlayFlex(setupOverlay);
+
+      const activate = () => {
+        if (
+          !applySecretsFromInputs({
+            groqKeyEl: setupGroqKey,
+            groqProxyEl: setupGroqProxy,
+            elevenKeyEl: setupElevenKey,
+            elevenVoiceEl: setupElevenVoice,
+            errEl: setupErr,
+            allowImplicitGroqKeep: false,
+          })
+        ) {
+          return;
+        }
+        hideOverlayFlex(setupOverlay);
+        finish(true);
+      };
+
+      setupActivateBtn.addEventListener("click", activate, { signal });
+      setupGroqKey.addEventListener(
+        "keydown",
+        (e) => {
+          if (e.key === "Enter") activate();
+        },
+        { signal }
+      );
+      wireInputClear(
+        [setupGroqKey, setupGroqProxy, setupElevenKey, setupElevenVoice],
+        setupErr
+      );
+    }
+  });
+}
 
 /** @type {Record<ButtonId, boolean>} */
 const buttonOn = Object.fromEntries(BUTTON_IDS.map((id) => [id, false]));
@@ -304,6 +612,7 @@ async function orchestrateAiExchange(chunk) {
     }
 
     await jarvisVoice(reply);
+    speechNoteEl.textContent = "";
 
     if (!mustStandDown) {
       chatTurns.push({ role: "user", content: chunk });
@@ -321,12 +630,23 @@ async function orchestrateAiExchange(chunk) {
     }
   } catch (error) {
     console.error(error);
+    const detail =
+      error instanceof Error ? error.message : String(error);
+    const clipped =
+      detail.length > 300 ? `${detail.slice(0, 297)}...` : detail;
+    speechNoteEl.textContent = clipped;
     subtitleEl.textContent =
-      "Groq / Eleven pipeline fault — check network, proxies, keys.";
-    await jarvisVoice(
-      "My apologies Sir — I lost contact with HQ networks. Shall we retry once circuits settle?",
-      { priority: true }
-    );
+      "Groq request failed — details in the small note under the status pill.";
+    try {
+      await jarvisVoice(
+        "My apologies Sir — I lost contact with HQ networks. Shall we retry once circuits settle?",
+        { priority: true }
+      );
+    } catch {
+      await speak(
+        "Groq request failed, Sir. Check the note on screen or the browser console."
+      );
+    }
   } finally {
     setRelaySpeakingVisual(false);
     exchangeLock = false;
@@ -424,7 +744,7 @@ async function bootstrapFromUserGesture() {
   startBtn.textContent = "Initializing…";
 
   try {
-    await ensureSecretsPrompt({ force: false });
+    await waitForKeysUi({ force: false });
     await initialiseAudioStack();
     recognition.restartFresh();
 
@@ -474,7 +794,9 @@ startBtn.addEventListener("click", bootstrapFromUserGesture);
 
 configBtn?.addEventListener("click", async () => {
   if (appState === States.SPEAKING) return;
-  await ensureSecretsPrompt({ force: true });
-  speechNoteEl.textContent = "Keys & voice updated locally.";
+  const saved = await waitForKeysUi({ force: true });
+  speechNoteEl.textContent = saved
+    ? "Keys & voice updated locally."
+    : "No changes saved.";
   subtitleEl.textContent = "Say “wake up jarvis” again if you were mid-session, Sir.";
 });
